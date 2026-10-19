@@ -1,0 +1,14 @@
+numpy==1.26.2
+opencv-python==4.8.1.78
+scipy==1.11.4
+control==0.9.4
+
+dm-control==1.0.17
+mujoco==3.1.4
+
+torch
+torchaudio
+torchvision
+
+tensorboard
+moviepy
