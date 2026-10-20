@@ -11,7 +11,7 @@ from rl.env import make_env
 @dataclass
 class EnvConfig:
     domain: str = "double_pendulum"
-    task: str = "balance"
+    task: str = "swingup"  # 1. swingup タスクに変更
     repeat: int = 2
     num_digitized: int = 16
     num_action: int = 9
@@ -24,7 +24,8 @@ class EnvConfig:
     should_log_scalar: int = 200
     should_log_video: int = 10000
     restore: bool = True
-    restore_path: str = "logs/train/10-19-14-48-15/qtable_40000.npy"
+    # 2. 振り上げ用Qテーブルのパスを指定（環境に合わせて変更してください）
+    restore_path: str = "logs/train/best_policy/qtable_40000.npy"
     video_length: int = 200
     logdir: str = pathlib.Path().joinpath("./logs/real-by-rl", str(time.strftime("%m-%d-%H-%M-%S")))
 
@@ -39,23 +40,23 @@ class TrainedAgent():
         print(config.restore_path)
         self.qtable.load(config.restore_path)
         self.env = make_env(config)
-        self.start = False
+        self.start = True  # 3. 初期状態から制御を開始させる
         self.data = {'n_alpha': [], 'n_theta': []}
 
     def _digitized_obs(self, obs):
         '''
-        obs[0] theata
+        obs[0] theta
         obs[1] alpha
         obs[2] theta dot
         obs[3] alpha dot
         '''
         d = self.config.num_digitized
         n_arm_rad = np.digitize(obs[0],
-                                np.linspace(self.env._arm_limit[0], self.env._arm_limit[1], d//self.env._arm_div +1)[1:-1])
+                                np.linspace(-np.pi, np.pi, d//self.env._arm_div +1)[1:-1])
         n_arm_vel = np.digitize(obs[2].clip(-8, 8), np.linspace(-8, 8, d+1)[1:-1])
 
         n_pen_rad = np.digitize(obs[1],
-                                np.linspace(self.env._pendulum_limit[0], self.env._pendulum_limit[1], d+1)[1:-1] + self.env._arrange)
+                                np.linspace(-np.pi, np.pi, d+1)[1:-1] + self.env._arrange)
         n_pen_vel = np.digitize(obs[3].clip(-8, 8), np.linspace(-8, 8, d+1)[1:-1])
 
         state_dict = {}
@@ -71,21 +72,19 @@ class TrainedAgent():
         return state_dict["digitized_state"], done, state_dict
 
     def policy(self, obs):
-        if self.start:
-                digitized_state, done, state_dict = self._digitized_obs(obs)
-                digitized_action = self.qtable.get_action(digitized_state, False)
-                torque = self.env._digitized_action[digitized_action]
-                self.data['n_alpha'].append(state_dict['n_pen_rad'])
-                self.data['n_theta'].append(state_dict['n_arm_rad'])
-                if done:
-                    return 0
-                if abs(obs[0]) > 0.8*np.pi:
-                    return 0
-                return torque
-        else:
-            if abs(obs[0]) < 0.8*np.pi and abs(obs[1]) < np.pi/50.0:
-                self.start = True
-            return 0
+        # 最初から RL ポリシーに従ってトルクを出力する
+        digitized_state, done, state_dict = self._digitized_obs(obs)
+        digitized_action = self.qtable.get_action(digitized_state, False)
+        torque = self.env._digitized_action[digitized_action]
+        
+        self.data['n_alpha'].append(state_dict['n_pen_rad'])
+        self.data['n_theta'].append(state_dict['n_arm_rad'])
+        
+        # 安全用リミッター（アームが端に行きすぎたらトルクオフ）
+        if done or abs(obs[0]) > 0.8 * np.pi:
+            return 0.0
+            
+        return torque
 
     def after_termination_func(self, data):
         data.update({'n_alpha': self.data['n_alpha'], 'n_theta': self.data['n_theta']})
@@ -110,7 +109,6 @@ class TrainedAgent():
         self.logger.log_image(img_dict)
 
 def main():
-
     agent = TrainedAgent()
     my_invpen = Invpen(agent)
 
