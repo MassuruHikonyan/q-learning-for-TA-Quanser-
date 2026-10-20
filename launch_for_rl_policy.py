@@ -24,7 +24,7 @@ class EnvConfig:
     should_log_scalar: int = 200
     should_log_video: int = 10000
     restore: bool = True
-    restore_path: str = "logs/train/06-06-15-26-20/qtable_40000.npy"
+    restore_path: str = "logs/train/10-19-14-48-15/qtable_40000.npy"
     video_length: int = 200
     logdir: str = pathlib.Path().joinpath("./logs/real-by-rl", str(time.strftime("%m-%d-%H-%M-%S")))
 
